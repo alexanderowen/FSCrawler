@@ -9,10 +9,15 @@ import (
 	"sync"
 )
 
+/*************** Defining a Gouroutine-safe Queue class ************/
+/**************** that doubles as a barrier construct **************/
+
 type Node struct {
 	val string
 }
 
+// No mutex reference; sync.Cond will create
+// one in it's initialization
 type Queue struct {
 	list        []*Node
 	cond        *sync.Cond
@@ -20,6 +25,8 @@ type Queue struct {
 	numWaiting  int
 }
 
+// Creates a new Queue
+// Overlaying structure is a Go slice
 func NewQueue(num int) *Queue {
 	return &Queue{
 		list:        make([]*Node, 0),
@@ -29,20 +36,22 @@ func NewQueue(num int) *Queue {
 	}
 }
 
+// Queue.push method
 func (q *Queue) Push(n *Node) {
 	q.cond.L.Lock()
-	defer q.cond.L.Unlock()
+	defer q.cond.L.Unlock() // defer; will execute this line just before func returns
 	q.list = append(q.list, n)
 }
 
+// Queue.pop method; blocks the calling function until there is work, or when all
+// goroutines are waiting, at which point it sends 'nil'
 func (q *Queue) Pop() *Node {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
 	defer q.cond.Broadcast()
 	q.numWaiting++
 	for q.Len() == 0 {
-		//fmt.Printf("Waiting for pop. Waiting: %d and Total: %d\n", q.numWaiting, q.numRoutines)
-		if q.numWaiting == q.numRoutines { // barrier condition, no more work
+		if q.numWaiting == q.numRoutines { // barrier condition met, no more work
 			return nil
 		}
 		q.cond.Wait()
@@ -53,22 +62,25 @@ func (q *Queue) Pop() *Node {
 	return n
 }
 
+// Queue.Len method; returns length of queue
 func (q *Queue) Len() int {
 	return len(q.list)
 }
 
+/************ End Queue definition *************/
+
+// Worker function for goroutines
 func crawler(workQ *Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		n := workQ.Pop()
-		if n == nil {
-			return //all done
+		if n == nil { // All goroutines waiting, time to die
+			return
 		}
 
-		//fmt.Printf("Testing: '%s'\n", n.val)
 		files, err := ioutil.ReadDir(n.val)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Found an error: '%s'\n", err)
+		if err != nil { // error occurred
+			fmt.Fprintf(os.Stderr, "Error attempting to read dir. Message: '%s'\n", err)
 			continue
 		}
 		for _, file := range files {
@@ -81,6 +93,7 @@ func crawler(workQ *Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
 	}
 }
 
+// Converts regular expression from Bash syntax to Go.regexp syntax
 func convertToRegexp(pat string) string {
 	reg := "^"
 	for _, char := range pat {
@@ -101,10 +114,10 @@ func convertToRegexp(pat string) string {
 func main() {
 	pattern := os.Args[1]
 	reg := regexp.MustCompile(convertToRegexp(pattern))
-	var wg sync.WaitGroup
+	var wg sync.WaitGroup // Use WaitGroup so main thread knows when execution is complete
 
 	var numRoutines int
-	if env := os.Getenv("CRAWLER_THREADS"); env != "" {
+	if env := os.Getenv("CRAWLER_THREADS"); env != "" { //get env var
 		numRoutines, _ = strconv.Atoi(env)
 	} else {
 		numRoutines = 2
@@ -116,9 +129,9 @@ func main() {
 	}
 	work.Push(n)
 	for i := 0; i < numRoutines; i++ {
-		wg.Add(1)
+		wg.Add(1) // For each goroutine created, there is another one to wait on
 		go crawler(work, reg, &wg)
 	}
 
-	wg.Wait()
+	wg.Wait() // main; don't terminate until all goroutines finished
 }

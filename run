@@ -1,0 +1,15 @@
+go run main.go '*' files > out
+wc out
+wc P1.out
+go run main.go '*.c' files > out
+wc out 
+wc P2.out
+go run main.go '*.[ch]' files > out
+wc out 
+wc P3.out
+go run main.go 'a?*.java' files > out
+wc out 
+wc P4.out
+go run main.go '???????' files > out
+wc out 
+wc P5.out
