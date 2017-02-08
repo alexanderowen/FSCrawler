@@ -5,8 +5,8 @@ import (
 	"io/ioutil"
 	"os"
 	"regexp"
+	"strconv"
 	"sync"
-	"time"
 )
 
 type Node struct {
@@ -38,18 +38,18 @@ func (q *Queue) Push(n *Node) {
 func (q *Queue) Pop() *Node {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock()
+	defer q.cond.Broadcast()
 	q.numWaiting++
 	for q.Len() == 0 {
+		//fmt.Printf("Waiting for pop. Waiting: %d and Total: %d\n", q.numWaiting, q.numRoutines)
 		if q.numWaiting == q.numRoutines { // barrier condition, no more work
-			q.cond.Broadcast()
 			return nil
 		}
 		q.cond.Wait()
 	}
+	q.numWaiting--
 	n := (q.list)[0]
 	q.list = (q.list)[1:]
-
-	q.cond.Broadcast()
 	return n
 }
 
@@ -57,14 +57,15 @@ func (q *Queue) Len() int {
 	return len(q.list)
 }
 
-func crawler(workQ *Queue, reg *regexp.Regexp) {
+func crawler(workQ *Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
+	defer wg.Done()
 	for {
 		n := workQ.Pop()
 		if n == nil {
 			return //all done
 		}
 
-		fmt.Printf("Testing: '%s'\n", n.val)
+		//fmt.Printf("Testing: '%s'\n", n.val)
 		files, err := ioutil.ReadDir(n.val)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Found an error: '%s'\n", err)
@@ -73,8 +74,7 @@ func crawler(workQ *Queue, reg *regexp.Regexp) {
 		for _, file := range files {
 			if file.IsDir() {
 				workQ.Push(&Node{val: n.val + "/" + file.Name()})
-			}
-			if reg.MatchString(file.Name()) {
+			} else if reg.MatchString(file.Name()) {
 				fmt.Printf("Found a match: %s\n", file.Name())
 			}
 		}
@@ -100,22 +100,27 @@ func convertToRegexp(pat string) string {
 
 func main() {
 	pattern := os.Args[1]
-	var validID = regexp.MustCompile(convertToRegexp(pattern))
+	reg := regexp.MustCompile(convertToRegexp(pattern))
+	var wg sync.WaitGroup
 
-	work := NewQueue(1)
+	var numRoutines int
+	if env := os.Getenv("CRAWLER_THREADS"); env != "" {
+		numRoutines, _ = strconv.Atoi(env)
+	} else {
+		numRoutines = 2
+	}
+	fmt.Println("Number of routines:", numRoutines)
+
+	work := NewQueue(numRoutines)
 	n := &Node{
 		val: ".",
 	}
 	work.Push(n)
-	go crawler(work, validID)
-	/*
-		work.cond.L.Lock()
-		for work.numWaiting != work.numRoutines {
-			work.cond.Wait()
-		}
-		work.cond.L.Unlock()
-	*/
-	time.Sleep(100 * time.Millisecond)
-	fmt.Println("Main finished.")
+	for i := 0; i < numRoutines; i++ {
+		wg.Add(1)
+		go crawler(work, reg, &wg)
+	}
 
+	wg.Wait()
+	fmt.Println("Main finished.")
 }
