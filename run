@@ -1,6 +1,6 @@
 go run main.go '*' files > out
-wc out
-wc P1.out
+python3 sort.py
+diff out P1.out
 go run main.go '*.c' files > out
 wc out 
 wc P2.out

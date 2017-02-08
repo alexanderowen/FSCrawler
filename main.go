@@ -114,6 +114,13 @@ func convertToRegexp(pat string) string {
 func main() {
 	pattern := os.Args[1]
 	reg := regexp.MustCompile(convertToRegexp(pattern))
+
+	var dir string
+	if len(os.Args) == 3 {
+		dir = os.Args[2]
+	} else {
+		dir = "."
+	}
 	var wg sync.WaitGroup // Use WaitGroup so main thread knows when execution is complete
 
 	var numRoutines int
@@ -125,7 +132,7 @@ func main() {
 
 	work := NewQueue(numRoutines)
 	n := &Node{
-		val: ".",
+		val: dir,
 	}
 	work.Push(n)
 	for i := 0; i < numRoutines; i++ {
