@@ -75,14 +75,14 @@ func crawler(workQ *Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
 			if file.IsDir() {
 				workQ.Push(&Node{val: n.val + "/" + file.Name()})
 			} else if reg.MatchString(file.Name()) {
-				fmt.Printf("Found a match: %s\n", file.Name())
+				fmt.Printf("%s/%s\n", n.val, file.Name())
 			}
 		}
 	}
 }
 
 func convertToRegexp(pat string) string {
-	var reg string
+	reg := "^"
 	for _, char := range pat {
 		switch char {
 		case '*':
@@ -95,7 +95,7 @@ func convertToRegexp(pat string) string {
 			reg = reg + string(char)
 		}
 	}
-	return reg
+	return reg + "$"
 }
 
 func main() {
@@ -109,7 +109,6 @@ func main() {
 	} else {
 		numRoutines = 2
 	}
-	fmt.Println("Number of routines:", numRoutines)
 
 	work := NewQueue(numRoutines)
 	n := &Node{
@@ -122,5 +121,4 @@ func main() {
 	}
 
 	wg.Wait()
-	fmt.Println("Main finished.")
 }
