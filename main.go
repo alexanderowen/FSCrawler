@@ -2,6 +2,8 @@ package main
 
 import (
 	GSQ "GSQueue"
+	GSH "GSStringHeap"
+	"container/heap"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -11,7 +13,7 @@ import (
 )
 
 // Worker function for goroutines
-func crawler(workQ *GSQ.Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
+func crawler(workQ *GSQ.Queue, done *GSH.GSStringHeap, reg *regexp.Regexp, wg *sync.WaitGroup) {
 	defer wg.Done()
 	for {
 		n := workQ.Pop()
@@ -28,7 +30,9 @@ func crawler(workQ *GSQ.Queue, reg *regexp.Regexp, wg *sync.WaitGroup) {
 			if file.IsDir() {
 				workQ.Push(GSQ.NewNode(n.GetValue() + "/" + file.Name()))
 			} else if reg.MatchString(file.Name()) {
-				fmt.Printf("%s/%s\n", n.GetValue(), file.Name())
+				//fmt.Printf("%s/%s\n", n.GetValue(), file.Name())
+				str := fmt.Sprintf("%s/%s", n.GetValue(), file.Name())
+				heap.Push(done, str)
 			}
 		}
 	}
@@ -62,7 +66,6 @@ func main() {
 	} else {
 		dir = "."
 	}
-	var wg sync.WaitGroup // Use WaitGroup so main thread knows when execution is complete
 
 	var numRoutines int
 	if env := os.Getenv("CRAWLER_THREADS"); env != "" { //get env var
@@ -71,13 +74,19 @@ func main() {
 		numRoutines = 2
 	}
 
+	done := GSH.NewGSStringHeap()
+	heap.Init(done) // can now use the heap interface
 	work := GSQ.NewQueue(numRoutines)
 	n := GSQ.NewNode(dir)
 	work.Push(n)
+	var wg sync.WaitGroup // Use WaitGroup so main thread knows when execution is complete
 	for i := 0; i < numRoutines; i++ {
 		wg.Add(1) // For each goroutine created, there is another one to wait on
-		go crawler(work, reg, &wg)
+		go crawler(work, done, reg, &wg)
 	}
 
 	wg.Wait() // main; don't terminate until all goroutines finished
+	for done.Len() > 0 {
+		fmt.Printf("%s\n", heap.Pop(done))
+	}
 }

@@ -1,3 +1,9 @@
+/* Author: Alexander Owen
+ *
+ * Package defining a Goroutine-safe Queue that acts as a Barrier
+ * Implemented specifically for File System Crawler
+ */
+
 package GSQueue
 
 import (
@@ -7,6 +13,7 @@ import (
 /*************** Defining a Gouroutine-safe Queue class ************/
 /**************** that doubles as a barrier construct **************/
 
+// Node in our Queue class
 type Node struct {
 	val string
 }
@@ -21,8 +28,8 @@ func (n *Node) GetValue() string {
 	return n.val
 }
 
-// No mutex reference; sync.Cond will create
-// one in it's initialization
+// Queue as a Barrier, requires knowledge of goroutines using it
+// Note: No mutex field; sync.Cond will create one
 type Queue struct {
 	list        []*Node
 	cond        *sync.Cond
@@ -41,7 +48,6 @@ func NewQueue(num int) *Queue {
 	}
 }
 
-// Queue.push method
 func (q *Queue) Push(n *Node) {
 	q.cond.L.Lock()
 	defer q.cond.L.Unlock() // defer; will execute this line just before func returns
@@ -67,7 +73,7 @@ func (q *Queue) Pop() *Node {
 	return n
 }
 
-// Queue.Len method; returns length of queue
+// Returns length of queue
 func (q *Queue) Len() int {
 	return len(q.list)
 }
