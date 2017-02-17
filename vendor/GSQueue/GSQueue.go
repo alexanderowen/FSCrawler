@@ -75,5 +75,7 @@ func (q *Queue) Pop() *Node {
 
 // Returns length of queue
 func (q *Queue) Len() int {
+	q.cond.L.Lock()
+	defer q.cond.L.Unlock()
 	return len(q.list)
 }
